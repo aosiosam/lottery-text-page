@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title></title>
+<style>html,body{margin:0;min-height:100%;background:#fff;color:#111}body{padding:16px;box-sizing:border-box;font:18px/1.7 system-ui,"Microsoft YaHei",sans-serif}main{white-space:pre-wrap;overflow-wrap:anywhere;text-align:left} [hidden]{display:none!important}.loading{position:fixed;inset:0;display:grid;place-items:center}.spinner{width:30px;height:30px;border:3px solid #eee;border-top-color:#777;border-radius:50%;animation:spin .9s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation-duration:2.5s}}</style>
+<div id="loading" class="loading" role="status" aria-label="正在加载" aria-live="polite"><span class="spinner" aria-hidden="true"></span></div>
+<main id="text" hidden></main>
+<script>
+const output=document.getElementById('text');
+const loading=document.getElementById('loading');
+function render(d){const done=d?.state==='complete';loading.hidden=done;output.hidden=!done;output.textContent=done?(d.text||''):''}
+let busy=false;
+async function update(){if(busy)return;busy=true;try{const r=await fetch('/api/display',{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error();const d=await r.json();render(d)}catch{render(null)}finally{busy=false}}
+update();setInterval(update,10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)update()});
+</script>
+</html>
