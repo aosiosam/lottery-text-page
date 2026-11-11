@@ -16,9 +16,10 @@ export async function handlePoster(req,env,json,headers){
  }
  if(path==='/api/admin/poster/qrcode'&&req.method==='GET'){
   const target=posterUrl(url.searchParams.get('target')||'');if(!target)return json({error:'请输入完整的 http 或 https 网址，最长 900 字符'},400);
-  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(target))),n=>n.toString(16).padStart(2,'0')).join(''),key='poster/qr/'+hash+'.png';let obj=await env.BUCKET.get(key);
+  const qrTarget='https://rrluo.github.io/jump/api/?url='+encodeURI(decodeURI(target));
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(qrTarget))),n=>n.toString(16).padStart(2,'0')).join(''),key='poster/qr/'+hash+'.png';let obj=await env.BUCKET.get(key);
   if(obj)return new Response(req.method==='HEAD'?null:obj.body,{headers:{...headers,'Content-Type':'image/png'}});
-  const upstream=new URL('https://api.2dcode.biz/v1/create-qr-code');upstream.search=new URLSearchParams({data:target,size:'1024x1024',format:'png',error_correction:'H',border:'4'}).toString();
+  const upstream=new URL('https://api.2dcode.biz/v1/create-qr-code');upstream.search=new URLSearchParams({data:qrTarget,size:'1024x1024',format:'png',error_correction:'H',border:'4'}).toString();
   let r;try{r=await fetch(upstream,{signal:AbortSignal.timeout(20000),redirect:'error'})}catch{return json({error:'暂时无法连接草料，请稍后重试'},502)}
   if(!r.ok)return json({error:'草料生成失败，请稍后重试'},502);
   let bytes;try{bytes=await posterBytes(r,3*1024*1024)}catch{return json({error:'草料返回图片过大'},502)}if(!posterPng(bytes))return json({error:'草料未返回有效的二维码图片'},502);
