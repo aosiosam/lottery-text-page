@@ -1,3 +1,5 @@
+import {displayDefaults,displayAllowed} from './display-control.mjs';
+import {browserOpenResponse} from './browser-open.mjs';
 import http from 'node:http';
 import {Readable} from 'node:stream';
 import {handlePoster} from './poster-service.mjs';
@@ -8,7 +10,7 @@ import {join,dirname} from 'node:path';
 import {classify,beijingDate} from './lottery.mjs';
 const root=dirname(fileURLToPath(import.meta.url)),dir=join(root,'data');await mkdir(dir,{recursive:true});
 const historyDir=join(dir,'history');await mkdir(historyDir,{recursive:true});
-const settingsFile=join(dir,'settings.json');let settings={afterText:''};try{const stored=JSON.parse(await readFile(settingsFile,'utf8'));settings={afterText:typeof stored.afterText==='string'?stored.afterText:''}}catch(e){if(e.code!=='ENOENT')throw e}
+const settingsFile=join(dir,'settings.json');let settings={afterText:'',...displayDefaults};try{const stored=JSON.parse(await readFile(settingsFile,'utf8'));settings={...displayDefaults,...stored,afterText:typeof stored.afterText==='string'?stored.afterText:''}}catch(e){if(e.code!=='ENOENT')throw e}
 let password=process.env.ADMIN_PASSWORD;
 if(!password){try{password=(await readFile(join(dir,'admin-password.txt'),'utf8')).trim()}catch(e){if(e.code!=='ENOENT')throw e;password=randomBytes(12).toString('base64url');await writeFile(join(dir,'admin-password.txt'),password,{mode:0o600})}}
 const sessions=new Map(),attempts=new Map();let cache=null,inflight=null,writing=false;
@@ -25,6 +27,7 @@ async function body(req){let str='';for await(const c of req){str+=c;if(Buffer.b
 function equal(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y)}
 const server=http.createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://localhost'),path=url.pathname;
+ if(path==='/open-browser'&&req.method==='GET'){const out=browserOpenResponse(url,req.headers['user-agent']||'');res.writeHead(out.status,Object.fromEntries(out.headers));return res.end(Buffer.from(await out.arrayBuffer()))}
  if(/^\/\.well-known\/acme-challenge\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){try{return send(res,200,await readFile(join(root,'.well-known','acme-challenge',path.split('/').pop())),'text/plain; charset=utf-8')}catch{return send(res,404,{error:'Not found'})}}
  if(path==='/assets/hidden-qr.mjs'&&req.method==='GET')return send(res,200,await readFile(join(root,'hidden-qr.mjs')),'text/javascript; charset=utf-8');
  if(req.method==='POST'&&req.headers.origin){if(new URL(req.headers.origin).host!==req.headers.host)return send(res,403,{error:'请求来源不匹配'})}
@@ -32,7 +35,7 @@ const server=http.createServer(async(req,res)=>{try{
  const authorized=session&&session.expires>Date.now();
  if(path==='/api/login'&&req.method==='POST'){
   const ip=req.socket.remoteAddress,entry=attempts.get(ip)||{count:0,until:0};if(entry.until<Date.now())entry.count=0;if(entry.count>=10)return send(res,429,{error:'尝试过多，请 15 分钟后再试'});
-  const d=await body(req);if(!equal(d.password||'',password)){entry.count++;entry.until=Date.now()+900000;attempts.set(ip,entry);return send(res,401,{error:'密码错误'})}
+  const d=await body(req);if(!equal(d.username||'','admin')||!equal(d.password||'',password)){entry.count++;entry.until=Date.now()+900000;attempts.set(ip,entry);return send(res,401,{error:'账号或密码错误'})}
   attempts.delete(ip);const token=randomBytes(32).toString('hex');sessions.set(token,{expires:Date.now()+43200000,csrf:randomBytes(24).toString('hex')});res.setHeader('Set-Cookie',`session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${(req.socket.encrypted||req.headers['x-forwarded-proto']==='https')?'; Secure':''}`);return send(res,200,{ok:true});
  }
  if(path.startsWith('/api/admin/')||path==='/api/logout'||path==='/preview'||path==='/poster'){
@@ -51,13 +54,13 @@ const server=http.createServer(async(req,res)=>{try{
   if(path==='/api/admin/settings'&&req.method==='GET')return send(res,200,{...settings,csrf:session.csrf});
   if(path==='/api/admin/settings'&&req.method==='POST'){
    const d=await body(req);if(typeof d.afterText!=='string'||d.afterText.length>50000)return send(res,400,{error:'最多 50000 字'});
-   if(writing)return send(res,409,{error:'正在保存，请稍后重试'});writing=true;try{const next={afterText:d.afterText};await writeFile(settingsFile+'.tmp',JSON.stringify(next,null,2));await rename(settingsFile+'.tmp',settingsFile);settings=next}finally{writing=false}return send(res,200,{ok:true});
+   if(writing)return send(res,409,{error:'正在保存，请稍后重试'});writing=true;try{if(!['manual','scheduled'].includes(d.displayMode)||typeof d.manualEnabled!=='boolean'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.publishTime||''))return send(res,400,{error:'请检查显示方式和时间'});const next={afterText:d.afterText,displayMode:d.displayMode,manualEnabled:d.manualEnabled,publishTime:d.publishTime};await writeFile(settingsFile+'.tmp',JSON.stringify(next,null,2));await rename(settingsFile+'.tmp',settingsFile);settings=next}finally{writing=false}return send(res,200,{ok:true});
   }
   if(path==='/api/logout'&&req.method==='POST'){sessions.delete(cookie);res.setHeader('Set-Cookie','session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true})}
  }
  if(req.method==='GET'&&/^\/\d{4}-\d{2}-\d{2}$/.test(path)){const date=path.slice(1);if(!validDate(date)||date>beijingDate())return send(res,404,{error:'日期不存在'});if(date<beijingDate()&&!await recordFor(date))return send(res,404,{error:'暂无历史记录'});return send(res,200,await readFile(join(root,'index.html')),'text/html; charset=utf-8')}
  if(req.method==='GET'&&/^\/api\/history\/\d{4}-\d{2}-\d{2}$/.test(path)){const date=path.slice('/api/history/'.length);if(!validDate(date))return send(res,404,{error:'日期不存在'});const record=await recordFor(date);return send(res,record?200:404,record||{error:'暂无记录'})}
- if(path==='/api/display'&&req.method==='GET'){const date=url.searchParams.get('date');if(date&&(!validDate(date)||date>beijingDate()))return send(res,404,{error:'日期不存在'});if(date){const record=await recordFor(date);if(record)return send(res,200,{state:'complete',text:record.text,date});if(date!==beijingDate())return send(res,404,{error:'暂无记录'})}const s=await check();const record=await archive(s);return send(res,200,{state:s.state,text:s.state==='complete'?(date?record?.text||'':settings.afterText):'',date:s.today,archived:!!record})}
+ if(path==='/api/display'&&req.method==='GET'){const date=url.searchParams.get('date');if(date&&(!validDate(date)||date>beijingDate()))return send(res,404,{error:'日期不存在'});if(date){const record=await recordFor(date);if(record)return send(res,200,{state:'complete',text:record.text,date});if(date!==beijingDate())return send(res,404,{error:'暂无记录'})}const today=beijingDate(),allowed=displayAllowed(settings);const s={state:allowed?'complete':'pending',today,drawDate:today,period:settings.displayMode==='manual'?'手动发布':'定时发布',numbers:[],special:null};const record=await archive(s);return send(res,200,{state:s.state,text:s.state==='complete'?(date?record?.text||'':settings.afterText):'',date:s.today,archived:!!record})}
  if(req.method==='GET'&&(path==='/'||path==='/index.html'||path==='/admin'||path==='/admin.html'))return send(res,200,await readFile(join(root,path.startsWith('/admin')?'admin.html':'index.html')),'text/html; charset=utf-8');
  send(res,404,{error:'页面不存在'});
  }catch{send(res,400,{error:'请求无法处理，请稍后重试'})}

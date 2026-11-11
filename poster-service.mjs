@@ -16,7 +16,7 @@ export async function handlePoster(req,env,json,headers){
  }
  if(path==='/api/admin/poster/qrcode'&&req.method==='GET'){
   const target=posterUrl(url.searchParams.get('target')||'');if(!target)return json({error:'请输入完整的 http 或 https 网址，最长 900 字符'},400);
-  const qrTarget='https://rrluo.github.io/jump/api/?url='+encodeURI(decodeURI(target));
+  const qrTarget='https://svitla.it.com/open-browser?target='+encodeURIComponent(target);
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(qrTarget))),n=>n.toString(16).padStart(2,'0')).join(''),key='poster/qr/'+hash+'.png';let obj=await env.BUCKET.get(key);
   if(obj)return new Response(req.method==='HEAD'?null:obj.body,{headers:{...headers,'Content-Type':'image/png'}});
   const upstream=new URL('https://api.2dcode.biz/v1/create-qr-code');upstream.search=new URLSearchParams({data:qrTarget,size:'1024x1024',format:'png',error_correction:'H',border:'4'}).toString();
