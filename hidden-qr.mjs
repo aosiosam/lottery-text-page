@@ -12,9 +12,9 @@ export function composeHidden(base,width,height,qr,qrWidth,qrHeight,settings){
  const data=new Uint8Array(base);for(let i=3;i<data.length;i+=4)data[i]=255;
  for(let dy=0;dy<side;dy++)for(let dx=0;dx<side;dx++){
   const qx=Math.floor((Math.floor(dx/unit)+.5)*qrWidth/modules),qy=Math.floor((Math.floor(dy/unit)+.5)*qrHeight/modules);
-  if(isDark(qx,qy))continue;
-  const i=((y+dy)*width+x+dx)*4,alpha=Math.max(base[i],base[i+1],base[i+2],16);
-  for(let c=0;c<3;c++)data[i+c]=Math.min(255,Math.round(base[i+c]*255/alpha));data[i+3]=alpha;
+  if(!isDark(qx,qy))continue;
+  const i=((y+dy)*width+x+dx)*4,alpha=Math.max(255-Math.min(base[i],base[i+1],base[i+2]),16);
+  for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,Math.round((base[i+c]-(255-alpha))*255/alpha)));data[i+3]=alpha;
  }
  return {data,box:{x,y,side,modules,unit}};
 }
