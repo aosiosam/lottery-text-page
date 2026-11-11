@@ -1,7 +1,8 @@
 import {classify,beijingDate} from './lottery.mjs';
 import {indexHtml,adminHtml} from './pages.mjs';
+import {handlePoster} from './poster-service.mjs';
 let cached=null,inflight=null;
-const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"};
+const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"};
 const json=(data,status=200,extra={})=>new Response(JSON.stringify(data),{status,headers:{...headers,'Content-Type':'application/json; charset=utf-8',...extra}});
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,'0')).join('');
 async function equal(a,b){const hash=async v=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(v))));const[x,y]=await Promise.all([hash(a),hash(b)]);let d=0;for(let i=0;i<x.length;i++)d|=x[i]^y[i];return d===0}
@@ -19,6 +20,7 @@ async function archive(env,status,settings){
 async function listHistory(env,before){let cursor,objects=[];do{const page=await env.BUCKET.list({prefix:'history/',include:['customMetadata'],cursor,limit:1000});objects.push(...page.objects);cursor=page.truncated?page.cursor:undefined}while(cursor);return objects.filter(o=>!before||o.key.slice(8,18)<before).sort((a,b)=>b.key.localeCompare(a.key)).slice(0,31).map(o=>({date:o.key.slice(8,18),period:o.customMetadata?.period||'',numbers:o.customMetadata?.numbers||'',url:'/'+o.key.slice(8,18)}))}
 export default {async fetch(req,env){try{
  const url=new URL(req.url),path=url.pathname;
+ if(path==='/assets/hidden-qr.mjs'&&req.method==='GET')return new Response(hiddenQrCode,{headers:{...headers,'Content-Type':'text/javascript; charset=utf-8'}});
  if(req.method==='POST'&&req.headers.get('Origin')&&req.headers.get('Origin')!==url.origin)return json({error:'请求来源不匹配'},403);
  if(req.method==='GET'&&['/','/index.html','/admin','/admin.html'].includes(path))return new Response(path.startsWith('/admin')?adminHtml:indexHtml,{headers:{...headers,'Content-Type':'text/html; charset=utf-8'}});
  if(req.method==='GET'&&/^\/\d{4}-\d{2}-\d{2}$/.test(path)){const date=path.slice(1);if(!validDate(date)||date>beijingDate())return json({error:'日期不存在'},404);if(date<beijingDate()&&!await read(env,'history/'+date+'.json'))return new Response('该日期暂无已保存记录。',{status:404,headers:{...headers,'Content-Type':'text/plain; charset=utf-8'}});return new Response(indexHtml,{headers:{...headers,'Content-Type':'text/html; charset=utf-8'}})}
@@ -35,10 +37,12 @@ export default {async fetch(req,env){try{
   const d=await body(req);if(!await equal(d.password||'',env.ADMIN_PASSWORD)){await env.BUCKET.put(key,JSON.stringify({count:(record?.until>Date.now()?record.count:0)+1,until:Date.now()+900000}));return json({error:'密码错误'},401)}
   await env.BUCKET.delete(key);const id=token();await env.BUCKET.put('sessions/'+id,JSON.stringify({expires:Date.now()+43200000,csrf:token()}));return json({ok:true},200,{'Set-Cookie':`session=${id}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`});
  }
- if(path.startsWith('/api/admin/')||path==='/api/logout'||path==='/preview'){
+ if(path.startsWith('/api/admin/')||path==='/api/logout'||path==='/preview'||path==='/poster'){
   const id=/\bsession=([a-f0-9]{64})\b/.exec(req.headers.get('Cookie')||'')?.[1];const session=id?await read(env,'sessions/'+id):null;if(!session||session.expires<Date.now())return json({error:'请先登录'},401);
+  if(path==='/poster'&&req.method==='GET')return new Response(posterHtml,{headers:{...headers,'Content-Type':'text/html; charset=utf-8'}});
   if(path==='/preview'&&req.method==='GET'){const settings=await read(env,'settings.json');const text=String(settings?.afterText||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');const html=indexHtml.replace(/<script>[\s\S]*?<\/script>/,'').replace('id="loading" class="loading"','id="loading" class="loading" hidden').replace('<main id="text" hidden></main>','<main id="text">'+text+'</main>');return new Response(html,{headers:{...headers,'Content-Type':'text/html; charset=utf-8'}})}
   if(req.method==='POST'&&!await equal(req.headers.get('X-CSRF-Token')||'',session.csrf))return json({error:'请重新登录后再操作'},403);
+  if(path.startsWith('/api/admin/poster/')){const result=await handlePoster(req,env,json,headers);if(result)return result}
   if(path==='/api/admin/status'&&req.method==='GET')return json(await check());
   if(path==='/api/admin/history'&&req.method==='GET'){const before=url.searchParams.get('before');if(before&&!validDate(before))return json({error:'日期无效'},400);const items=await listHistory(env,before);return json({items:items.slice(0,30),next:items.length>30?items[29].date:null})}
   if(path==='/api/admin/settings'&&req.method==='GET'){const settings=await read(env,'settings.json');return json({afterText:settings?.afterText||'',csrf:session.csrf})}
