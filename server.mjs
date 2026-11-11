@@ -54,7 +54,7 @@ const server=http.createServer(async(req,res)=>{try{
   if(path==='/api/admin/settings'&&req.method==='GET')return send(res,200,{...settings,csrf:session.csrf});
   if(path==='/api/admin/settings'&&req.method==='POST'){
    const d=await body(req);if(typeof d.afterText!=='string'||d.afterText.length>50000)return send(res,400,{error:'最多 50000 字'});
-   if(writing)return send(res,409,{error:'正在保存，请稍后重试'});writing=true;try{if(!['manual','scheduled'].includes(d.displayMode)||typeof d.manualEnabled!=='boolean'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.publishTime||''))return send(res,400,{error:'请检查显示方式和时间'});const next={afterText:d.afterText,displayMode:d.displayMode,manualEnabled:d.manualEnabled,publishTime:d.publishTime};await writeFile(settingsFile+'.tmp',JSON.stringify(next,null,2));await rename(settingsFile+'.tmp',settingsFile);settings=next}finally{writing=false}return send(res,200,{ok:true});
+   if(writing)return send(res,409,{error:'正在保存，请稍后重试'});writing=true;try{if(!['manual','scheduled'].includes(d.displayMode)||typeof d.manualEnabled!=='boolean'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(d.publishTime||''))return send(res,400,{error:'请检查显示方式和时间'});const next={afterText:d.afterText,displayMode:d.displayMode,manualEnabled:d.manualEnabled,manualDate:d.manualEnabled?(d.publishToday===true?beijingDate():settings.manualDate):null,publishTime:d.publishTime};await writeFile(settingsFile+'.tmp',JSON.stringify(next,null,2));await rename(settingsFile+'.tmp',settingsFile);settings=next}finally{writing=false}return send(res,200,{ok:true});
   }
   if(path==='/api/logout'&&req.method==='POST'){sessions.delete(cookie);res.setHeader('Set-Cookie','session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');return send(res,200,{ok:true})}
  }
