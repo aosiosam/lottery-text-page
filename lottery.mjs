@@ -7,5 +7,5 @@ export function classify(payload,now=new Date()) {
   const list=d.numberList;
   const valid=n=>n&&/^\d{1,2}$/.test(String(n.number))&&Number(n.number)>=1&&Number(n.number)<=49&&Number(n.color)>0;
   const complete=drawDate===today&&Array.isArray(list)&&list.length===7&&list.every(valid)&&new Set(list.map(n=>Number(n.number))).size===7;
-  return {today,drawDate,period:d.period,state:complete?'complete':'pending',special:drawDate===today&&valid(list?.[6])?list[6].number:null};
+  return {today,drawDate,period:d.period,state:complete?'complete':'pending',special:drawDate===today&&valid(list?.[6])?list[6].number:null,numbers:complete?list.map(n=>String(n.number).padStart(2,'0')):[]};
 }

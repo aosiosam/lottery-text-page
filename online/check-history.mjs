@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import worker from './dist/server/index.js';
+const store=new Map(),metadata=new Map();let archiveWrites=0;
+const env={ADMIN_PASSWORD:'test-only',BUCKET:{async get(key){return store.has(key)?{json:async()=>JSON.parse(store.get(key))}:null},async put(key,value,options){if(options?.onlyIf&&store.has(key))return null;store.set(key,value);metadata.set(key,options?.customMetadata);if(key.startsWith('history/'))archiveWrites++;return{key}},async delete(key){store.delete(key)},async list({prefix}){return{objects:[...store.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key,customMetadata:metadata.get(key)})),truncated:false}}}};
+const date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const req=(path,method='GET',body,cookie,csrf)=>new Request('https://example.test'+path,{method,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...(csrf?{'X-CSRF-Token':csrf}:{})},body:body?JSON.stringify(body):undefined});
+store.set('settings.json',JSON.stringify({afterText:'第一版\n<script>纯文字</script>'}));
+let r=await worker.fetch(req('/api/admin/history'),env);assert.equal(r.status,401);
+const original=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({code:10000,subCode:10000,data:{lotteryType:2,period:316,lotteryTime:date,numberList:[1,2,3,4,5,6,7].map(number=>({number,color:1}))}}));
+await Promise.all([worker.fetch(req('/api/display'),env),worker.fetch(req('/api/display'),env)]);assert.equal(archiveWrites,1);
+store.set('settings.json',JSON.stringify({afterText:'第二版'}));
+r=await worker.fetch(req('/api/display?date='+date),env);assert.equal((await r.json()).text,'第一版\n<script>纯文字</script>');
+r=await worker.fetch(req('/api/display'),env);assert.equal((await r.json()).text,'第二版');assert.equal(archiveWrites,1);
+r=await worker.fetch(req('/'+date),env);assert.equal(r.status,200);
+r=await worker.fetch(req('/api/history/'+date),env);const archived=await r.json();assert.equal(archived.numbers.length,7);assert.equal(archived.text,'第一版\n<script>纯文字</script>');
+r=await worker.fetch(req('/api/display?date=2026-02-30'),env);assert.equal(r.status,404);
+r=await worker.fetch(req('/api/login','POST',{password:'test-only'}),env);const cookie=r.headers.get('Set-Cookie').split(';')[0];
+r=await worker.fetch(req('/api/admin/history','GET',null,cookie),env);const history=await r.json();assert.equal(history.items[0].date,date);assert.equal(history.items[0].url,'/'+date);
+const {adminHtml}=await import('./pages.mjs');assert.ok(!adminHtml.includes('<h2>开奖检查</h2>'));assert.ok(adminHtml.includes('<h2>历史记录</h2>'));
+globalThis.fetch=original;console.log('归档只写一次、并发防覆盖、日期页面、历史权限、隐藏检查区验证通过');
+

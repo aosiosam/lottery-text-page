@@ -10,8 +10,10 @@
 const output=document.getElementById('text');
 const loading=document.getElementById('loading');
 function render(d){const done=d?.state==='complete';loading.hidden=done;output.hidden=!done;output.textContent=done?(d.text||''):''}
+const datePath=/^\/\d{4}-\d{2}-\d{2}$/.test(location.pathname)?location.pathname.slice(1):null;
+const displayUrl='/api/display'+(datePath?'?date='+encodeURIComponent(datePath):'');
 let busy=false;
-async function update(){if(busy)return;busy=true;try{const r=await fetch('/api/display',{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error();const d=await r.json();render(d)}catch{render(null)}finally{busy=false}}
+async function update(){if(busy)return;busy=true;try{const r=await fetch(displayUrl,{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error();const d=await r.json();render(d)}catch{render(null)}finally{busy=false}}
 update();setInterval(update,10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)update()});
 </script>
 </html>
