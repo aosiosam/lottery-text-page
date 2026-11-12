@@ -28,7 +28,7 @@ async function historyLock(date,fn){const previous=historyLocks.get(date)||Promi
 async function historyDeleted(date){try{await readFile(join(historyDir,date+'.deleted'));return true}catch(e){if(e.code==='ENOENT')return false;throw e}}
 async function archive(status){if(status.state!=='complete')return null;return historyLock(status.drawDate,async()=>{if(await historyDeleted(status.drawDate))return null;const record={date:status.drawDate,period:status.period,numbers:status.numbers,special:status.special,text:settings.afterText,title:settings.pageTitle||'',savedAt:new Date().toISOString()};try{await writeFile(join(historyDir,record.date+'.json'),JSON.stringify(record),{flag:'wx'})}catch(e){if(e.code!=='EEXIST')throw e}return recordFor(record.date)})}
 
-function send(res,status,data,type='application/json; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"});res.end(type.startsWith('application/json')?JSON.stringify(data):data)}
+function send(res,status,data,type='application/json; charset=utf-8'){res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store, no-cache, must-revalidate, max-age=0','Pragma':'no-cache','Expires':'0','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; img-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"});res.end(type.startsWith('application/json')?JSON.stringify(data):data)}
 function titleHtml(html,title){return html.replace(/<title>[\s\S]*?<\/title>/,()=>'<title>'+String(title||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')+'</title>')}
 async function body(req){let str='';for await(const c of req){str+=c;if(Buffer.byteLength(str)>450000)throw Error('内容过长')}return JSON.parse(str||'{}')}
 function equal(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y)}
@@ -52,6 +52,18 @@ const server=http.createServer(async(req,res)=>{try{
   if(path==='/poster'&&req.method==='GET')return send(res,200,await readFile(join(root,'poster.html')),'text/html; charset=utf-8');
   if(path==='/preview'&&req.method==='GET'){const text=String(settings.afterText||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');const html=(await readFile(join(root,'index.html'),'utf8')).replace(/<script>[\s\S]*?<\/script>/,'').replace('id="loading" class="loading"','id="loading" class="loading" hidden').replace('<main id="text" hidden></main>','<main id="text">'+text+'</main>');return send(res,200,titleHtml(html,settings.pageTitle),'text/html; charset=utf-8')}
   if(['POST','DELETE'].includes(req.method)&&!equal(req.headers['x-csrf-token']||'',session.csrf))return send(res,403,{error:'请重新登录后再操作'});
+  if(path==='/api/admin/poster/text'){
+   const date=url.searchParams.get('date')||beijingDate();
+   if(date!==beijingDate())return send(res,409,{error:'请在历史记录中编辑旧日期文字'});
+   if(req.method==='GET'){const record=await recordFor(date);return send(res,200,{date,text:record?.text??settings.afterText})}
+   if(req.method==='POST'){
+    const d=await body(req);if(typeof d.text!=='string'||d.text.length>50000)return send(res,400,{error:'文字最多 50000 字'});
+    if(writing)return send(res,409,{error:'正在保存，请稍后重试'});writing=true;
+    try{await historyLock(date,async()=>{const next={...settings,afterText:d.text};await writeFile(settingsFile+'.tmp',JSON.stringify(next,null,2));await rename(settingsFile+'.tmp',settingsFile);settings=next;const record=await recordFor(date);if(record&&!await historyDeleted(date)){const file=join(historyDir,date+'.json');await writeFile(file+'.tmp',JSON.stringify({...record,text:d.text,editedAt:new Date().toISOString()}));await rename(file+'.tmp',file)}})}finally{writing=false}
+    return send(res,200,{ok:true,date});
+   }
+   return send(res,405,{error:'不支持的操作'});
+  }
   if(path.startsWith('/api/admin/poster/')){
    const bucket={async get(key){try{const bytes=await readFile(join(dir,...key.split('/')));return{body:bytes,json:async()=>JSON.parse(bytes.toString('utf8'))}}catch(e){if(e.code==='ENOENT')return null;throw e}},async put(key,value){const file=join(dir,...key.split('/'));await mkdir(dirname(file),{recursive:true});const temp=file+'.'+randomBytes(6).toString('hex')+'.tmp';await writeFile(temp,value);await rename(temp,file);return{key}}};
    const webReq=new Request('http://'+req.headers.host+req.url,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:Readable.toWeb(req),duplex:'half'}:{})});

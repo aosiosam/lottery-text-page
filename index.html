@@ -13,7 +13,7 @@ function render(d){if(d&&typeof d.title==='string')document.title=d.title;const 
 const datePath=/^\/\d{4}-\d{2}-\d{2}$/.test(location.pathname)?location.pathname.slice(1):null;
 const displayUrl='/api/display'+(datePath?'?date='+encodeURIComponent(datePath):'');
 let busy=false;
-async function update(){if(busy)return;busy=true;try{const r=await fetch(displayUrl,{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error();const d=await r.json();render(d)}catch{render(null)}finally{busy=false}}
-update();setInterval(update,10000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)update()});
+async function update(){if(busy)return;busy=true;try{const r=await fetch(displayUrl+(displayUrl.includes('?')?'&':'?')+'_='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error();const d=await r.json();render(d)}catch{render(null)}finally{busy=false}}
+update();setInterval(update,3000);window.addEventListener('pageshow',()=>update());document.addEventListener('visibilitychange',()=>{if(!document.hidden)update()});
 </script>
 </html>
