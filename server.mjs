@@ -1,3 +1,5 @@
+import {createEntrySelector,healthMarker} from './entry-routing.mjs';
+const chooseEntry=createEntrySelector();
 import {displayDefaults,displayAllowed} from './display-control.mjs';
 import {browserOpenResponse} from './browser-open.mjs';
 import http from 'node:http';
@@ -32,6 +34,8 @@ async function body(req){let str='';for await(const c of req){str+=c;if(Buffer.b
 function equal(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y)}
 const server=http.createServer(async(req,res)=>{try{
  const url=new URL(req.url,'http://localhost'),path=url.pathname;
+ if(path==='/api/entry-health'&&req.method==='GET')return send(res,200,healthMarker,'text/plain; charset=utf-8');
+ if(path==='/go'&&req.method==='GET'){const date=url.searchParams.get('date')||beijingDate();if(!validDate(date)||date>beijingDate())return send(res,400,{error:'日期无效'});const origin=await chooseEntry();if(!origin)return send(res,503,'网站暂时无法访问，请稍后重试。','text/plain; charset=utf-8');const target=origin+'/'+date;res.writeHead(302,{'Cache-Control':'no-store',Location:settings.redirectEnabled===false?target:origin+'/open-browser?target='+encodeURIComponent(target)});return res.end()}
  if(path==='/open-browser'&&req.method==='GET'){const out=browserOpenResponse(url,req.headers['user-agent']||'',settings.redirectEnabled!==false);res.writeHead(out.status,Object.fromEntries(out.headers));return res.end(Buffer.from(await out.arrayBuffer()))}
  if(/^\/\.well-known\/acme-challenge\/[A-Za-z0-9_-]+$/.test(path)&&req.method==='GET'){try{return send(res,200,await readFile(join(root,'.well-known','acme-challenge',path.split('/').pop())),'text/plain; charset=utf-8')}catch{return send(res,404,{error:'Not found'})}}
  if(path==='/assets/hidden-qr.mjs'&&req.method==='GET')return send(res,200,await readFile(join(root,'hidden-qr.mjs')),'text/javascript; charset=utf-8');
