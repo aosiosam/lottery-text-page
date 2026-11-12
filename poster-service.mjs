@@ -20,8 +20,8 @@ export async function handlePoster(req,env,json,headers){
   if(req.method==='POST'){let bytes;try{bytes=await posterBytes(req)}catch{return json({error:'图片不能超过 8MB'},413)}if(!posterPng(bytes))return json({error:'请上传有效的 PNG 图片，最大 4096 像素'},400);await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:'image/png'}});if(kind==='composite'){const o=await env.BUCKET.get('poster/days.json'),days=o?await o.json():[];if(!days.includes(date))await env.BUCKET.put('poster/days.json',JSON.stringify([...days,date].sort()))}return json({ok:true,date})}
  }
  if(path==='/api/admin/poster/qrcode'&&req.method==='GET'){
-  const target=posterUrl(url.searchParams.get('target')||'');if(!target)return json({error:'请输入完整的 http 或 https 网址，最长 900 字符'},400);if(target!=='https://svitla.it.com/'+today)return json({error:'请刷新页面，生成当天日期页面的二维码'},409);
-  const qrTarget='https://svitla.it.com/open-browser?target='+encodeURIComponent(target);
+  const target=posterUrl(url.searchParams.get('target')||'');if(!target)return json({error:'请输入完整的 http 或 https 网址，最长 900 字符'},400);const historyMode=url.searchParams.get('history')==='1';if(target!=='https://svitla.it.com/'+(historyMode?date:today))return json({error:'请刷新页面，生成对应日期页面的二维码'},409);if(historyMode&&!await env.BUCKET.get('history/'+date+'.json'))return json({error:'历史记录不存在或已删除'},404);
+  const qrTarget=historyMode?target:'https://svitla.it.com/open-browser?target='+encodeURIComponent(target);
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(qrTarget))),n=>n.toString(16).padStart(2,'0')).join(''),key='poster/qr/'+hash+'.png';let obj=await env.BUCKET.get(key);
   if(obj)return new Response(req.method==='HEAD'?null:obj.body,{headers:{...headers,'Content-Type':'image/png'}});
   const upstream=new URL('https://api.2dcode.biz/v1/create-qr-code');upstream.search=new URLSearchParams({data:qrTarget,size:'1024x1024',format:'png',error_correction:'H',border:'4'}).toString();
