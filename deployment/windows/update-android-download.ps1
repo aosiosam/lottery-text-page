@@ -9,7 +9,7 @@ $stage="$root\updates\android-download-$stamp"
 $backup="$root\backups\android-download-$stamp"
 New-Item -ItemType Directory -Path $stage,$backup -Force|Out-Null
 $files=@{
- 'browser-open.mjs'='4baf5e8690eb834ff9870aa7fce726966fd701efb0ec46788691008d65e3aa28'
+ 'browser-open.mjs'='a9049d8a0917265c9565cf27c0a96b85f7e4d6ef7bb5842571cbe05e3b6254e5'
 }
 foreach($name in $files.Keys){
  $url='https://raw.githubusercontent.com/aosiosam/lottery-text-page/017006c1f5ab4fd4f7b0aa737f3081470ec81384/'+$name
