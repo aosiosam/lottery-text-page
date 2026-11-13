@@ -1,0 +1,10 @@
+{
+  "format": "AES-256-GCM",
+  "nonce": "0L4c0yGd0Xee9KV/",
+  "aad": "lottery-windows-migration-2026-11-14-v1",
+  "plaintextSha256": "f8f6e9bc8569044e32dcd10b0701e36b58723b497eb607cceda4a08a6073a8f4",
+  "ciphertextSha256": "b10c594d08d2822633be331354f65534593fb2d7a22c99a0315d74ebf2652ba7",
+  "plaintextBytes": 5658895,
+  "ciphertextBytes": 5658911,
+  "keyLocation": "Hosted secret WINDOWS_BACKUP_KEY and private offline recovery file; not in this repository"
+}
