@@ -10,7 +10,7 @@ function missing(){const e=new Error('Not found');e.code='ENOENT';return e}
 function bytes(value){return typeof value==='string'?encoder.encode(value):value}
 function buffer(value){const out=new Uint8Array(value);out.toString=()=>decoder.decode(out);return out}
 function keyOf(path){if(!path.startsWith('/app/data/'))throw Error('Invalid storage path');const key=path.slice('/app/data/'.length);if(key.split('/').some(v=>v==='..'||v==='.')||key.includes('\\'))throw Error('Invalid storage key');return key}
-async function allObjects(bucket,prefix){let cursor;const objects=[];do{const p=await bucket.list({prefix,cursor,limit:1000});objects.push(...p.objects);cursor=p.truncated?p.cursor:undefined}while(cursor);return objects}
+async function allObjects(bucket,prefix){let cursor;const objects=[];do{const p=await bucket.list({prefix,cursor,limit:1000,include:['customMetadata']});objects.push(...p.objects);cursor=p.truncated?p.cursor:undefined}while(cursor);return objects}
 function persistentMap(bucket,prefix){return{async get(k){const o=await bucket.get(storagePrefix+prefix+k);return o?o.json():undefined},async set(k,v){await bucket.put(storagePrefix+prefix+k,JSON.stringify(v))},async delete(k){await bucket.delete(storagePrefix+prefix+k)}}}
 function filesystem(env,assets){const temporary=new Map();return{
  async mkdir(){},
@@ -23,7 +23,7 @@ function filesystem(env,assets){const temporary=new Map();return{
 function requestAdapter(original){const url=new URL(original.url),headers=Object.fromEntries(original.headers);headers.host=url.host;return{url:url.pathname+url.search,method:original.method,headers,socket:{encrypted:true,remoteAddress:original.headers.get('cf-connecting-ip')||'unknown'},async *[Symbol.asyncIterator](){if(!original.body)return;const reader=original.body.getReader();const decode=new TextDecoder();for(;;){const {done,value}=await reader.read();if(done)break;yield decode.decode(value,{stream:true})}const rest=decode.decode();if(rest)yield rest}}}
 function responseAdapter(){return{status:200,headers:new Headers(),response:null,setHeader(k,v){this.headers.set(k,v)},writeHead(status,headers={}){this.status=status;for(const[k,v]of Object.entries(headers))this.headers.set(k,v)},end(data){this.response=new Response(data??null,{status:this.status,headers:this.headers});return this.response}}}
 async function migrationRoute(original,env){
- const url=new URL(original.url);if(!url.pathname.startsWith('/api/admin/migration/'))return null;
+ const url=new URL(original.url);if(url.pathname==='/3ec8d8db9982067211e0d5f094bec457.txt'&&['GET','HEAD'].includes(original.method))return new Response(original.method==='HEAD'?null:'631a740406c46c99486c25ea99a2b32c19f2bb7d',{headers:{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'}});if(!url.pathname.startsWith('/api/admin/migration/'))return null;
  const cookie=/\bsession=([a-f0-9]+)\b/.exec(original.headers.get('cookie')||'')?.[1];
  const session=cookie?await persistentMap(env.BUCKET,'sessions/').get(cookie):null;
  const reply=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
@@ -38,3 +38,4 @@ async function migrationRoute(original,env){
  if(hash!==url.searchParams.get('sha256'))return reply({error:'Checksum mismatch'},400);
  await env.BUCKET.put(storagePrefix+key,data,{customMetadata:{sha256:hash}});return reply({ok:true,key,sha256:hash});
 }
+
