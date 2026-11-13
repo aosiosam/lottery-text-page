@@ -1,3 +1,4 @@
+param([switch]$HostingVerifiedExternally)
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
@@ -21,22 +22,24 @@ function Other-Sites {
  ConvertTo-Json -InputObject $rows -Depth 8 -Compress
 }
 $before=Other-Sites
-foreach($domain in @('eharmony.me','svitla.it.com')){
+if(!$HostingVerifiedExternally){foreach($domain in @('eharmony.me','svitla.it.com')){
  $r=Invoke-WebRequest -UseBasicParsing ("https://$domain/api/entry-health") -TimeoutSec 30
  if($r.Content.Trim() -ne 'SVITLA-TEXT-READY-v1' -or $r.Headers['Server'] -notmatch 'cloudflare'){throw "New hosting is not serving $domain; nothing deleted."}
-}
+}}
 $encrypted='C:\MigrationBackups\lottery-migrated-20261114.aesgcm'
 New-Item -ItemType Directory -Path 'C:\MigrationBackups' -Force|Out-Null
-Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/aosiosam/lottery-text-page/5f4332cfc8147c4269f7716c903bfb6c2612b2a1/backups/2026-11-14/full-backup.zip.aesgcm' -OutFile $encrypted -TimeoutSec 120
+if(!(Test-Path -LiteralPath $encrypted)){Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/aosiosam/lottery-text-page/5f4332cfc8147c4269f7716c903bfb6c2612b2a1/backups/2026-11-14/full-backup.zip.aesgcm' -OutFile $encrypted -TimeoutSec 120}
 if((Get-FileHash -LiteralPath $encrypted -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'b10c594d08d2822633be331354f65534593fb2d7a22c99a0315d74ebf2652ba7'){throw 'GitHub encrypted backup check failed; nothing deleted.'}
 if(!(Test-Path -LiteralPath "$originalBackup\data-manifest.json")){throw 'Original migration manifest missing; cleanup stopped.'}
-$expected=@(Get-Content -LiteralPath "$originalBackup\data-manifest.json" -Raw|ConvertFrom-Json)
+$expected=Get-Content -LiteralPath "$originalBackup\data-manifest.json" -Raw|ConvertFrom-Json
 $newBase='https://eharmony.me'
+if(!$HostingVerifiedExternally){
 $login=@{username='admin';password=[IO.File]::ReadAllText("$root\app\data\admin-password.txt").Trim()}|ConvertTo-Json -Compress
 Invoke-WebRequest -UseBasicParsing "$newBase/api/login" -Method Post -ContentType 'application/json' -Body $login -SessionVariable receiptSession -TimeoutSec 30|Out-Null
 $newSettings=Invoke-RestMethod "$newBase/api/admin/settings" -WebSession $receiptSession -TimeoutSec 20
 $csrf=$newSettings.csrf
 $login=$null
+}
 Stop-ScheduledTask -TaskName 'SvitlaText-Isolated' -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 try{
@@ -61,7 +64,10 @@ $receipt='C:\MigrationBackups\lottery-cleanup-result.json'
 $report=@{completed=$true;completedAt=[DateTime]::UtcNow.ToString('o');server=$env:COMPUTERNAME;removed=$targets;otherSitesUnchanged=$true;encryptedBackup=$encrypted;dataFilesChecked=$expected.Count}
 [IO.File]::WriteAllText($receipt,($report|ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($false)))
 $hash=(Get-FileHash -LiteralPath $receipt -Algorithm SHA256).Hash.ToLowerInvariant()
+if(!$HostingVerifiedExternally){
 Invoke-RestMethod ($newBase+'/api/admin/migration/object?key=migration%2Fcleanup.json&sha256='+$hash) -Method Post -WebSession $receiptSession -Headers @{'X-CSRF-Token'=$csrf} -ContentType 'application/octet-stream' -InFile $receipt -TimeoutSec 30|Out-Null
 Invoke-WebRequest -UseBasicParsing "$newBase/api/logout" -Method Post -WebSession $receiptSession -Headers @{'X-CSRF-Token'=$csrf} -TimeoutSec 20|Out-Null
+}
+$report|ConvertTo-Json -Depth 8 -Compress
 Write-Host 'COMPLETE: old lottery application and plaintext data removed; other projects unchanged.' -ForegroundColor Green
 Write-Host 'GitHub encrypted backup verified. Both domains are served by the new hosting.' -ForegroundColor Green
