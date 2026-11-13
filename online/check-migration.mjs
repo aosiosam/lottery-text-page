@@ -27,8 +27,17 @@ r=await request('/api/admin/settings','POST',{...settings,manualEnabled:true,pub
 assert.equal((await(await request('/api/display?date='+today)).json()).text,'edited before display');
 await request('/api/admin/poster/text?date='+today,'POST',{text:'edited after display'});
 assert.equal((await(await request('/api/display?date='+today)).json()).text,'edited after display');
+const visibleRecord=await(await request('/api/admin/history/'+today)).json();
+assert.equal((await request('/api/admin/history/'+today,'POST',{...visibleRecord,visible:false})).status,200);
+assert.equal((await(await request('/api/display?date='+today)).json()).state,'pending');
+assert.equal((await(await request('/api/display')).json()).state,'pending');
+assert.equal((await(await request('/api/history/'+today)).json()).text,'');
+assert.equal((await request('/api/admin/history/'+today,'POST',{...visibleRecord,visible:true})).status,200);
+assert.equal((await(await request('/api/display?date='+today)).json()).text,'edited after display');
+
 settings=await(await request('/api/admin/settings')).json();await request('/api/admin/settings','POST',{...settings,manualEnabled:false});assert.equal((await(await request('/api/display?date='+today)).json()).state,'pending');
 assert.equal((await request('/poster')).status,200);assert.equal((await request('/api/admin/history')).status,200);
+settings=await(await request('/api/admin/settings')).json();await request('/api/admin/settings','POST',{...settings,redirectEnabled:false,manualEnabled:false});assert.equal((await request('/open-browser?target=https%3A%2F%2Feharmony.me%2F'+today,'GET',undefined,{'user-agent':'Android MicroMessenger/8.0'})).status,302);await request('/api/admin/settings','POST',{...settings,redirectEnabled:true,manualEnabled:false});
 r=await request('/open-browser?target=https%3A%2F%2Feharmony.me%2F'+today,'GET',undefined,{'user-agent':'Android MicroMessenger/8.0'});assert.match(r.headers.get('content-disposition'),/attachment/);
 assert.equal((await request('/api/admin/settings','POST',{...settings,manualEnabled:false},{'x-csrf-token':'wrong'})).status,403);
 const history=await(await request('/api/admin/poster/history')).json();for(const item of history.items){r=await request(item.url);assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png')}

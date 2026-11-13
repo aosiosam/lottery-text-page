@@ -28,14 +28,14 @@ async function migrationRoute(original,env){
  const session=cookie?await persistentMap(env.BUCKET,'sessions/').get(cookie):null;
  const reply=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
  if(!session||session.expires<Date.now())return reply({error:'请先登录'},401);
+ if(original.method==='GET'&&url.pathname.endsWith('/cleanup-status')){const o=await env.BUCKET.get(storagePrefix+'migration/cleanup.json');return reply(o?await o.json():{completed:false})}
  if(original.method==='GET'&&url.pathname.endsWith('/manifest')){const objects=await allObjects(env.BUCKET,storagePrefix);return reply({items:objects.filter(o=>!o.key.slice(storagePrefix.length).startsWith('sessions/')&&!o.key.slice(storagePrefix.length).startsWith('attempts/')).map(o=>({key:o.key.slice(storagePrefix.length),size:o.size,sha256:o.customMetadata?.sha256||null}))})}
  if(original.method!=='POST'||!equal(original.headers.get('x-csrf-token')||'',session.csrf))return reply({error:'Forbidden'},403);
  if(original.headers.get('origin')&&original.headers.get('origin')!==url.origin)return reply({error:'Forbidden'},403);
  const key=url.searchParams.get('key')||'';
- if(!/^(settings\.json|history\/\d{4}-\d{2}-\d{2}\.(json|deleted)|poster\/(background\.png|composite\.png|settings\.json|days\.json|qr\/[a-f0-9]+\.png|\d{4}-\d{2}-\d{2}\/(settings\.json|background\.png|composite\.png)))$/.test(key))return reply({error:'Invalid key'},400);
+ if(!/^(migration\/cleanup\.json|settings\.json|history\/\d{4}-\d{2}-\d{2}\.(json|deleted)|poster\/(background\.png|composite\.png|settings\.json|days\.json|qr\/[a-f0-9]+\.png|\d{4}-\d{2}-\d{2}\/(settings\.json|background\.png|composite\.png)))$/.test(key))return reply({error:'Invalid key'},400);
  const data=await original.arrayBuffer();if(data.byteLength>9*1024*1024)return reply({error:'Too large'},413);
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),x=>x.toString(16).padStart(2,'0')).join('');
  if(hash!==url.searchParams.get('sha256'))return reply({error:'Checksum mismatch'},400);
  await env.BUCKET.put(storagePrefix+key,data,{customMetadata:{sha256:hash}});return reply({ok:true,key,sha256:hash});
 }
-
