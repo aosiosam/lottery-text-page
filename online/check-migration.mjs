@@ -36,10 +36,12 @@ assert.equal((await request('/api/admin/history/'+today,'POST',{...visibleRecord
 assert.equal((await(await request('/api/display?date='+today)).json()).text,'edited after display');
 
 settings=await(await request('/api/admin/settings')).json();await request('/api/admin/settings','POST',{...settings,manualEnabled:false});assert.equal((await(await request('/api/display?date='+today)).json()).state,'pending');
-assert.equal((await request('/poster')).status,200);assert.equal((await request('/api/admin/history')).status,200);
-settings=await(await request('/api/admin/settings')).json();await request('/api/admin/settings','POST',{...settings,redirectEnabled:false,manualEnabled:false});assert.equal((await request('/open-browser?target=https%3A%2F%2Feharmony.me%2F'+today,'GET',undefined,{'user-agent':'Android MicroMessenger/8.0'})).status,302);await request('/api/admin/settings','POST',{...settings,redirectEnabled:true,manualEnabled:false});
-r=await request('/open-browser?target=https%3A%2F%2Feharmony.me%2F'+today,'GET',undefined,{'user-agent':'Android MicroMessenger/8.0'});assert.match(r.headers.get('content-disposition'),/attachment/);
+assert.equal((await request('/poster')).status,200);const posterConfig=await(await request('/api/admin/poster/settings')).json();assert.equal(posterConfig.targetUrl,'https://ingenstream.cn/'+today);assert.equal((await request('/api/admin/poster/qrcode?target='+encodeURIComponent('https://invalid.example/'+today))).status,409);assert.equal((await request('/api/admin/history')).status,200);
+settings=await(await request('/api/admin/settings')).json();await request('/api/admin/settings','POST',{...settings,redirectEnabled:false,manualEnabled:false});assert.equal((await request('/open-browser?target=https%3A%2F%2Fingenstream.cn%2F'+today,'GET',undefined,{'user-agent':'Android MicroMessenger/8.0'})).status,302);await request('/api/admin/settings','POST',{...settings,redirectEnabled:true,manualEnabled:false});
+r=await request('/open-browser?target=https%3A%2F%2Fingenstream.cn%2F'+today,'GET',undefined,{'user-agent':'Android MicroMessenger/8.0'});assert.match(r.headers.get('content-disposition'),/attachment/);
 assert.equal((await request('/api/admin/settings','POST',{...settings,manualEnabled:false},{'x-csrf-token':'wrong'})).status,403);
 const history=await(await request('/api/admin/poster/history')).json();for(const item of history.items){r=await request(item.url);assert.equal(r.status,200);assert.equal(r.headers.get('content-type'),'image/png')}
 r=await request('/');const html=await r.text();assert.match(html,/setInterval\(update,1000\)/);assert.match(html,/数据加载中/);
 console.log('PASS: imported data; durable login/CSRF; poster/history images; edit before/after display; today on/off; Android attachment; no-cache one-second page');
+
+const savedFetch=globalThis.fetch;globalThis.fetch=async()=>{throw Error("offline")};try{const qr=await request("/api/admin/poster/qrcode?target="+encodeURIComponent("https://ingenstream.cn/"+today));assert.equal(qr.status,200,await qr.clone().text());assert.equal(qr.headers.get("content-type"),"image/png")}finally{globalThis.fetch=savedFetch}

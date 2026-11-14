@@ -4,6 +4,7 @@ export const storagePrefix='windows-migration-v2/';
 const encoder=new TextEncoder(),decoder=new TextDecoder();
 const randomToken=(n=32)=>Array.from(crypto.getRandomValues(new Uint8Array(n)),x=>x.toString(16).padStart(2,'0')).join('');
 const join=(...parts)=>parts.join('/').replace(/\/+/g,'/');
+const dirname=path=>path.slice(0,path.lastIndexOf('/'));
 const historyLocks=new Map();let writing=false;
 function equal(a,b){a=encoder.encode(String(a));b=encoder.encode(String(b));let d=a.length^b.length;for(let i=0;i<Math.max(a.length,b.length);i++)d|=(a[i]||0)^(b[i]||0);return d===0}
 function missing(){const e=new Error('Not found');e.code='ENOENT';return e}

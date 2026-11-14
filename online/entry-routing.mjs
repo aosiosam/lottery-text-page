@@ -1,4 +1,4 @@
-export const entryOrigins=['https://eharmony.me','https://svitla.it.com'];
+export const entryOrigins=['https://ingenstream.cn'];
 export const healthMarker='SVITLA-TEXT-READY-v1';
 export function createEntrySelector(probe=async origin=>{
  const r=await fetch(origin+'/api/entry-health',{signal:AbortSignal.timeout(3500),redirect:'error',headers:{'Cache-Control':'no-cache'}});
@@ -6,6 +6,7 @@ export function createEntrySelector(probe=async origin=>{
 },now=Date.now){
  let cache=null,inflight=null;
  return async()=>{
+  if(entryOrigins.length===1)return entryOrigins[0];
   if(cache&&cache.until>now())return cache.origin;
   if(inflight)return inflight;
   inflight=(async()=>{

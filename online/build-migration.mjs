@@ -18,7 +18,8 @@ app=app.replaceAll('sessions.set(','await sessions.set(').replaceAll('sessions.d
 // Node's createServer wrapper ends in }); instead of the invoked async closure.
 if(!app.trimEnd().endsWith('});'))throw Error('Unexpected server wrapper');app=app.trimEnd().slice(0,-3)+'})();\nreturn res.response||new Response("No response",{status:500});';
 const adapter=await read('worker-adapter.mjs');
-const prefix=[await read('lottery.mjs'),await read('display-control.mjs'),await read('entry-routing.mjs'),await read('browser-open.mjs'),await read('poster-service.mjs')].map(strip).join('\n');
+const qrVendor=(await read('vendor/qrcode.mjs')).replace('export default qrcode;','').replace('export const stringToBytes = qrcode.stringToBytes;','');
+const prefix=[qrVendor,await read('hidden-qr.mjs'),await read('qr-local.mjs'),await read('lottery.mjs'),await read('display-control.mjs'),await read('entry-routing.mjs'),await read('browser-open.mjs'),await read('poster-service.mjs')].map(strip).join('\n');
 const worker=prefix+'\n'+strip(adapter)+'\nconst chooseEntry=createEntrySelector();\nconst assets='+JSON.stringify(assets)+';\nexport default {async fetch(original,env){try{const migration=await migrationRoute(original,env);if(migration)return migration;const {readFile,writeFile,rename,mkdir,readdir,unlink}=filesystem(env,assets);const req=requestAdapter(original),res=responseAdapter();const Readable={toWeb:()=>original.body};\n'+app+'\n}catch{return Response.json({error:"服务暂时不可用，请稍后重试"},{status:500,headers:{"Cache-Control":"no-store"}})}}};\n';
 if(/node:|\bBuffer\.|\brandomBytes\(/.test(worker))throw Error('Unported Node dependency');
 await mkdir('dist/server',{recursive:true});await mkdir('dist/.openai',{recursive:true});await writeFile('dist/server/index.js',worker);await writeFile('dist/.openai/hosting.json',await read('.openai/hosting.json'));
