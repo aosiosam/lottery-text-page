@@ -1,0 +1,7 @@
+Options -Indexes
+RewriteEngine On
+RewriteRule ^\.well-known/acme-challenge/ - [L]
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=308,L]
+RewriteRule ^(?:\.private|views)(?:/|$) - [F,L]
+RewriteRule ^ app.php [END]
