@@ -6,15 +6,17 @@ export function composeHidden(base,width,height,qr,qrWidth,qrHeight,settings){
  if(top<0)throw Error('二维码图片无效');let run=0;while(left+run<qrWidth&&isDark(left+run,top))run++;
  const modules=Math.round(qrWidth/(run/7));
  if(modules<29||modules>185||(modules-29)%4!==0)throw Error('无法确认二维码点阵，请重新生成');
- const unit=Math.max(2,Math.round(Math.min(width,height)*settings.size/100/modules));
- const side=unit*modules;if(side>Math.min(width,height))throw Error('底图太小，请上传更大的图片');
+ // Half the previous module scale, rounded only at the final image boundary.
+ const previousUnit=Math.max(2,Math.round(Math.min(width,height)*settings.size*2/100/modules));
+ const side=Math.round(previousUnit*modules/2),unit=side/modules;
+ if(side>Math.min(width,height))throw Error('底图太小，请上传更大的图片');
  const x=Math.round((width-side)*settings.x/100),y=Math.round((height-side)*settings.y/100);
  const data=new Uint8Array(base);for(let i=3;i<data.length;i+=4)data[i]=255;
  for(let dy=0;dy<side;dy++)for(let dx=0;dx<side;dx++){
   const qx=Math.floor((Math.floor(dx/unit)+.5)*qrWidth/modules),qy=Math.floor((Math.floor(dy/unit)+.5)*qrHeight/modules);
   if(!isDark(qx,qy))continue;
-  const i=((y+dy)*width+x+dx)*4,alpha=Math.max(255-Math.min(base[i],base[i+1],base[i+2]),16);
-  for(let c=0;c<3;c++)data[i+c]=Math.max(0,Math.min(255,Math.round((base[i+c]-(255-alpha))*255/alpha)));data[i+3]=alpha;
+  const i=((y+dy)*width+x+dx)*4,opacity=0.5;
+  for(let c=0;c<3;c++)data[i+c]=Math.round(base[i+c]*(1-opacity));data[i+3]=255;
  }
  return {data,box:{x,y,side,modules,unit}};
 }
